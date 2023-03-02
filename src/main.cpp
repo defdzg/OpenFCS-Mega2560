@@ -1,14 +1,7 @@
-/**
- * @author Daniel Enrique Fernández García (dfernandezg250@alumno.uaemex.mx)
- * @brief
- * @version 2.1
- * @date 2023-02-26
- *
- * @copyright Copyright (c) 2023 Universidad Autónoma del Estado de México
- */
-
-/* -------------------------------- Libraries ------------------------------- */
-#include <Arduino.h> // Arduino Library
+/* -------------------------------------------------------------------------- */
+/*                                  Libraries                                 */
+/* -------------------------------------------------------------------------- */
+#include <Arduino.h>
 #include <Elegoo_GFX.h>
 #include <Elegoo_TFTLCD.h>
 #include <Wire.h>
@@ -18,9 +11,15 @@
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include <SD.h>
-/* --------------------------------- VERSION -------------------------------- */
-String version = "2.1";
-/* --------------------------------- MACROS --------------------------------- */
+#include <TimerOne.h>
+
+/* -------------------------------------------------------------------------- */
+/*                                    Debug                                   */
+/* -------------------------------------------------------------------------- */
+#define DEBUG_RTC 0
+/* -------------------------------------------------------------------------- */
+/*                                 Components                                 */
+/* -------------------------------------------------------------------------- */
 /* ---------------------------- TFT LCD (Screen) ---------------------------- */
 #define LCD_CS A3
 #define LCD_CD A2
@@ -35,155 +34,272 @@ String version = "2.1";
 #define MAGENTA 0xF81F
 #define YELLOW 0xFFE0
 #define WHITE 0xFFFF
-#ifdef SET_RTC
-int setHour = 12;
-int setMin = 13;
-int setSec = 0;
-int setDay = 12;
-int setMonth = 10;
-int setYear = 2022;
-#endif
-#define POWER_SOURCE_RELAY_PIN 22           // +170V Rectified Voltage Source
-#define LAMP_RELAY_PIN 23                   // Incandescent lamp relay pin
-#define DHT_TYPE DHT22                      // DHT sensor type
-#define DHT_PIN 24                          // DHT22 sensor pin
-#define AUDIO_AMPLIFIER_PIN 25              // Audio amplifier tone output
-#define BUTTON_1_PIN 26                     // Push Button 1 pin
-#define BUTTON_2_PIN 27                     // Push Button 2 pin
-#define FIRST_SHOCK_BAR 28                  // First shock bar pin wired to the board teminal blocks
-#define LAST_SHOCK_BAR 45                   // Last shock bar pin wired to the board teminal blocks
-#define CAPACITOR_DISCHARGE_RESISTOR_PIN 46 // Capacitor discharge resistor pin
-uint8_t capacitor_discharge_time_in_sec = 100;
-// Due to PCB design errors, the calibration optocoupler is discarded
+Elegoo_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
+/* --------------------------------- Version -------------------------------- */
+String version = "2.0";
+/* ------------------------ DS3231 (Real Time Clock) ------------------------ */
+struct ts t;
+/* ----------------------------- Set Actual Time ---------------------------- */
+int setHour=12; 
+int setMin=13;
+int setSec=0;
+int setDay=12;
+int setMonth=10;
+int setYear=2022;
+int hour;
+int minute;
+int seconds;
+int day;
+int month;
+int year;
+/* ------------------------- RELAY (AC Power SOURCE) ------------------------ */
+#define SOURCE 22
+/* ------------------------------ RELAY  (Lamp) ----------------------------- */
+#define LAMP 23
+volatile byte statusLamp = LOW;
+/* ----------------- DHT22 (Humidity and Temperature Sensor) ---------------- */
+#define DHTPIN 24
+#define DHTTYPE DHT22
+DHT dht(DHTPIN, DHTTYPE);
+/* ------------------------ PAM8406 (Audio Amplifier) ----------------------- */
+#define PAM8406 25
+/* ------------------------------- Push Button ------------------------------ */
+#define pushButton1 26
+#define pushButton2 27
+volatile byte status1 = LOW;
+volatile byte status2 = LOW;
+/* --------------------- BARS GND (Floating Ground Bars) -------------------- */
+#define firstBAR 28
+#define lastBAR 45
+/* --------------------- RESISTOR (Capacitor Discharge) --------------------- */
+#define RESISTOR 46
+unsigned int dischargeTime = 100;
+/* --------------------------- Current Calibration -------------------------- */
 // #define CALIBRATION 47
-#define CS_SD_PIN 53                             // SD chip-select pin
-#define PIR_1_ANALOG_PIN A12                     // PIR 1 analog input pin
-#define PIR_2_ANALOG_PIN A13                     // PIR 2 analog input pin
-#define PIR_3_ANALOG_PIN A14                     // PIR 3 analog input pin
-#define SHOCK_VOLTAGE_ESTIMATION_ANALOG_PIN A15  // Current estimation analog input pin
-volatile byte lamp_status = LOW;                 // Lamp status ON/OFF
-float temperature = 0;                           // DHT22 temperature reading
-float humidity = 0;                              // DHT22 relative humidity reading
-volatile byte button_1_status = LOW;             // Push button 1 pressed status
-volatile byte button_2_status = LOW;             // Push button 2 pressed status
-volatile float current_estimation_value = 0;     // Current estimation voltage ADC voltage reading value
-uint16_t calibration_resistor_value = 993 + 270; // Current calibration voltage divider resistor
-const int shock_bars_activation_delay_in_ms = 10;
-/* -------------------------- HTML Form User Input -------------------------- */
-String received_str;
-String experiment_day_str;
-String animal_strain_str;
-String exploration_duration_str;
-String tone_frequency_str;
-String tone_duration_str;
-String shock_duration_str;
-String movement_register_duration_str;
-String waiting_interval_duration_str;
-String number_of_experiments_to_do_str;
-String experiment_context_str;
-// Variables to convert strings to integers
-uint16_t exploration_duration;
-uint16_t tone_frequency;
-uint16_t tone_duration;
-uint16_t shock_duration;
-uint16_t movement_register_duration;
-uint16_t waiting_interval_duration;
-uint8_t number_of_experiments_to_do;
-uint16_t experiment_context;
-volatile byte received_parameters_confirmation = false;
-String start_experiment_date;
-String start_experiment_time;
-String end_experiment_date;
-String end_experiment_time;
-unsigned long experiment_duration_in_ms;
+#define VOLTAGEREAD A15
+volatile float currentValue = 0;
+float calibrationResistor = 993 + 270;
+/* ------------------------------- PIR Sensors ------------------------------ */
+#define PIR1 A12
+#define PIR2 A13
+#define PIR3 A14
+byte statusPIR1 = false;
+byte statusPIR2 = false;
+byte statusPIR3 = false;
+String signalPIR1;
+String signalPIR2;
+String signalPIR3;
+/* ----------------- microSD (Micro SD Card Breakout Board) ----------------- */
+#define PIN_SD_CS 53
+File fileParams;
+File filePIR;
 
-/* -------------------------------- INSTANCES ------------------------------- */
-DHT dht(DHT_PIN, DHT_TYPE);                                   // DHT22 sensor instance
-Elegoo_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET); // TFT Instance
-struct ts t;                                                  // Time struct for RTC data
+// volatile int current_sample = 0; // Counter for the current sample in the IST
+// const int datalogger_frequency = 100;  // This frequency is set in Timer_1_Interrupt_Setup()
+// const int max_samples = datalogger_frequency * 60;
+// volatile int PIR_1_Data[max_samples];       // PIR 1 Sensor data vector
+// volatile int PIR_2_Data[max_samples];       // PIR 2 Sensor data vector
+// volatile int PIR_3_Data[max_samples];       // PIR 3 Sensor data vector
 /* -------------------------------------------------------------------------- */
-void Validate_Device_Startup()
-{
-  Serial.println("[INFO] Validating device");
-  if (!SD.begin(CS_SD_PIN))
-  {
-    tft.setTextColor(RED);
-    tft.println("[FAILED] SD Module");
-    Serial.println("[FAILED] SD Module");
-    while (1)
-      ; // If there's an error with the SD, the execution of the script stops.
-  }
-  else
-  {
-    tft.setTextColor(GREEN);
-    tft.println("[SUCCESS] SD Module");
-    Serial.println("[SUCCESS] SD Module");
-  }
+/*                           Expertiment Parameters                           */
+/* -------------------------------------------------------------------------- */
+/* -------------------------- HTML Form User Input -------------------------- */
+String readString;
+String experimentAnimalStr;
+String dayOfExperimentStr;
+String explorationTimeStr;
+String toneFrequencyStr;
+String toneTimeStr;
+String stimulationTimeStr;
+String movementAnalysisTimeStr;
+String intervalTimeStr;
+String numberOfEventsStr;
+String experimentContext;
+unsigned int explorationTime;
+unsigned int toneFrequency;
+unsigned int toneTime;
+unsigned int stimulationTime;
+unsigned int movementAnalysisTime;
+unsigned int intervalTime;
+int numberOfEvents;
+volatile byte confirmed = false;
+/* ------------------------ Temperature and Humidity ------------------------ */
+float temperature;
+float humidity;
+/* -------------------------------- Time Data ------------------------------- */
+unsigned long experimentStart;
+unsigned long experimentEnd;
+unsigned long experimentTotalTime;
+int dayStart;
+int monthStart;
+int yearStart;
+int hourStart;
+int minuteStart;
+int secondStart;
+int dayEnd;
+int monthEnd;
+int yearEnd;
+int hourEnd;
+int minuteEnd;
+int secondEnd;
+String dateStart;
+String timeStart;
+String dateEnd;
+String timeEnd;
+String dataToSave;
 
-  DS3231_get(&t);
-  if (t.hour == 0)
-  {
-    tft.setTextColor(RED);
-    tft.println("[FAILED] DS3231 Module");
-    Serial.println("[FAILED] DS3231 Module");
-    while (1);
-  }
-  else
-  {
-    tft.setTextColor(GREEN);
-    tft.println("[SUCCESS] DS3231 Module");
-    Serial.println("[SUCCESS] DS3231 Module");
-  }
+/* -------------------------------------------------------------------------- */
+/*                                Error Message                               */
+/* -------------------------------------------------------------------------- */
+void ErrorMessage(){
+  tft.setTextColor(RED);
+  tft.print("Error");
+  tft.println("");
+  delay(500);
+}
 
-  if (isnan(dht.readTemperature()) && isnan(dht.readHumidity()))
-  {
-    tft.setTextColor(RED);
-    tft.println("[FAILED] DHT22 Module");
-    Serial.println("[FAILED] DHT22 Module");
-    while (1);
-  }
-  else
-  {
-    tft.setTextColor(GREEN);
-    tft.println("[SUCCESS] DHT22 Module");
-    Serial.println("[SUCCESS] DHT22 Module");
-  }
+/* -------------------------------------------------------------------------- */
+/*                              Success Meessage                              */
+/* -------------------------------------------------------------------------- */
+void SuccessMessage(){
+  tft.setTextColor(GREEN);
+  tft.print("Exito");
+  tft.println("");
+  delay(500);
+}
+/* -------------------------------------------------------------------------- */
+/*                              Validate Modules                              */
+/* -------------------------------------------------------------------------- */
+void ValidateModules(){
+  tft.setTextColor(BLUE);
+  tft.println("Validacion de modulos");
+  tft.println("");
   tft.setTextColor(BLACK);
-  tft.println("[TEST] Tone Output");
-  Serial.println("[TEST] Tone Output");
-  tone(AUDIO_AMPLIFIER_PIN, 4000);
-  delay(1000);
-  noTone(AUDIO_AMPLIFIER_PIN);
-  tft.println("[TEST] Lamp Output");
-  Serial.println("[TEST] Lamp Output");
-  digitalWrite(LAMP_RELAY_PIN, HIGH);
-  delay(1000);
-  digitalWrite(LAMP_RELAY_PIN, LOW);
-  delay(1000);
+  tft.print("SD ..... ");
+  /* -------------------------------- SD Module ------------------------------- */
+  if (!SD.begin(PIN_SD_CS)){
+    ErrorMessage();
+    while (1); // If there's an error with the SD, the execution of the script stops.
+  }
+  else{
+    SuccessMessage();
+  }
+  /* ------------------------------- RTC Module ------------------------------- */
+  // tft.setTextColor(BLACK);
+  // tft.print("RTC ..... ");
+  // DS3231_get(&t);
+  // hour = t.hour;
+  // if(hour == 0){
+  //   ErrorMessage();
+  //   while (1);
+  // }
+  // else{
+  //   SuccessMessage();
+  // }
+  
+  /* ------------------------------- DHT Module ------------------------------- */
+  tft.setTextColor(BLACK);
+  tft.print("DHT ..... ");
+  if(isnan(dht.readTemperature()) && isnan(dht.readHumidity())){
+    ErrorMessage();
+    //while (1);
+  }
+  else{
+    SuccessMessage();
+  }
+  /* ------------------------------- PIR Sensors ------------------------------ */
+  // tft.setTextColor(BLACK);
+  // tft.print("PIR1 ..... ");
+
+  // for (int i = 0; i<20000; i++){
+  //   if(analogRead(PIR1) * float(5) / (float(1023)) > float(4.1)){
+  //     statusPIR1 = true;
+  //   }
+  //   if(analogRead(PIR2) * float(5) / (float(1023)) > float(4.1)){
+  //     statusPIR2 = true;
+  //   }
+  //   if(analogRead(PIR3) * float(5) / (float(1023)) > float(4.1)){
+  //     statusPIR3 = true;
+  //   }
+  // }
+  // // PIR 1
+  // if(statusPIR1 == true){
+  //   ErrorMessage();
+  //   //while (1);
+  // }
+  // else{
+  //   SuccessMessage();
+  // }
+  // // PIR 2
+  //  tft.setTextColor(BLACK);
+  // tft.print("PIR2 ..... ");
+  // if(statusPIR2 == true){
+  //   ErrorMessage();
+  //   //while (1);
+  // }
+  // else{
+  //   SuccessMessage();
+  // }
+  // // PIR 3
+  //  tft.setTextColor(BLACK);
+  // tft.print("PIR3 ..... ");
+  // if(statusPIR3 == true){
+  //   ErrorMessage();
+  //   //while (1);
+  // }
+  // else{
+  //   SuccessMessage();
+  // }
+  tft.println("");
+  tft.setTextColor(RED);
+  tft.println("Presiona 2 para confirmar el correcto funcionamiento del modulo");
+  tft.println("");
+  /* ------------------------------- SPKR Module ------------------------------ */
+  status2 = LOW;
+  tft.setTextColor(BLACK);
+  tft.print("SPKR ..... ");
+  while(status2 == LOW){
+    status2 = digitalRead(pushButton2);
+    tone(PAM8406, 4000);
+  }
+  noTone(PAM8406);
+  SuccessMessage();
+  /* ------------------------------- Lamp Module ------------------------------ */
+  status2 = LOW;
+  tft.setTextColor(BLACK);
+  tft.print("LAMP ..... ");
+  while(status2 == LOW){
+    status2 = digitalRead(pushButton2);
+    digitalWrite(LAMP, HIGH);
+  }
+  digitalWrite(LAMP, LOW);
+  SuccessMessage();
+  status2 = LOW;
+  delay(3000);
 }
 /* -------------------------------------------------------------------------- */
 /*                                Screen Header                               */
 /* -------------------------------------------------------------------------- */
-void TFT_Header()
-{
+void HeaderScreen(){
   tft.setRotation(3);
   tft.setTextSize(1);
-  tft.setCursor(0, 0);
+  tft.setCursor(0,0);
   tft.fillScreen(WHITE);
   tft.setTextColor(BLUE);
   tft.println("");
-  tft.println("Operant Conditioning Chamber v" + version);
+  tft.println("Camara de Condicionamiento Operante v" + version);
   tft.setTextColor(BLACK);
   tft.println("");
   tft.setTextSize(1);
+
 }
 /* -------------------------------------------------------------------------- */
 /*                                 Main Screen                                */
 /* -------------------------------------------------------------------------- */
-void TFT_Main_Screen()
-{
-  TFT_Header();
-  tft.println("To set the experiment parameters, complete the forms using your web browser.");
+void MainScreen(){
+  HeaderScreen();
+  tft.println("Para configurar los parametros del experimento, conecta tu  dispositivo movil a la red inalambrica y accede en tu navegador a la direccion IP indicada.");
+  tft.println("");
   tft.println("");
   tft.setTextColor(BLUE);
   tft.setTextSize(2);
@@ -194,403 +310,530 @@ void TFT_Main_Screen()
   tft.setTextColor(BLACK);
   tft.println("");
   tft.println("");
-  tft.println("Press 2 to enter Calibration Mode");
+  tft.println("Presiona 1 para calibrar la corriente de shock");
+  tft.println("");
+  tft.println("Presiona 2 para activar la lampara");
 }
 /* -------------------------------------------------------------------------- */
 /*                                Start Screen                                */
 /* -------------------------------------------------------------------------- */
-void TFT_Startup_Screen()
-{
-  Serial.println("[INFO] Startup screen");
-  TFT_Header();
+void StartScreen(){
+  HeaderScreen();
   tft.println("Laboratorio de Neurobiologia de la Adiccion y Plasticidad Cerebral");
   tft.println("");
   tft.println("Facultad de Ciecias, UAEMex");
   tft.println("");
   tft.println("");
-  Validate_Device_Startup();
+  ValidateModules();
 }
 /* -------------------------------------------------------------------------- */
 /*                          Temperature and Humidity                          */
 /* -------------------------------------------------------------------------- */
-void ReadDTH()
-{
+void ReadDTH(){
   temperature = dht.readTemperature();
   humidity = dht.readHumidity();
 }
 /* -------------------------------------------------------------------------- */
-/**
- * The function turns on the capacitor discharge resistor for a specified duration of time
- *
- * @param duration The time in milliseconds for which the capacitor should be discharged.
- */
-void Capacitor_Discharge(unsigned long duration)
-{
-  digitalWrite(POWER_SOURCE_RELAY_PIN, LOW);
-  unsigned long start_time = millis();
-  tft.fillScreen(WHITE);
-  Serial.println("[STARTED] Discharging the capacitor");
-  while ((millis() - start_time) < duration)
-  {
-    digitalWrite(CAPACITOR_DISCHARGE_RESISTOR_PIN, HIGH);
-  }
-  Serial.println("[ENDED] Discharging the capacitor");
-} // End Capacitor_Discharge()
+/*                                Date and Time                               */
 /* -------------------------------------------------------------------------- */
-/**
- * This function will display a cyan screen for the duration of the event
- *
- * @param duration The duration of the event in milliseconds
- */
-void Experiment_Exploration_Event(unsigned long duration)
-{
-  unsigned long start_time = millis();
-  tft.fillScreen(CYAN);
-  Serial.println("[STARTED] Environment event");
-  while ((millis() - start_time) < duration)
-  {
-  }
-  Serial.println("[ENDED] Exploration event");
-} // End Experiment_Exploration_Event()
+void GetClock(){
+  DS3231_get(&t);
+  hour = t.hour;
+  minute = t.min;
+  seconds = t.sec;
+  day = t.mday;
+  month = t.mon;
+  year = t.year;
+}
+
 /* -------------------------------------------------------------------------- */
-/**
- * This function plays a tone for a specified duration
- *
- * @param duration The duration of the tone in milliseconds
- */
-void Experiment_Tone_Event(unsigned long duration)
-{
-  unsigned long start_time = millis();
-  tft.fillScreen(GREEN);
-  Serial.println("[STARTED] Tone stimulus event");
-  while ((millis() - start_time) < duration)
-  {
-    tone(AUDIO_AMPLIFIER_PIN, tone_frequency);
-  }
-  Serial.println("[ENDED] Tone stimulus event");
-  noTone(AUDIO_AMPLIFIER_PIN);
-} // End Experiment_Tone_Event()
+/*                             Capacitor Discharge                            */
 /* -------------------------------------------------------------------------- */
-/**
- * It turns on the shock bars for a specified duration
- *
- * @param duration The duration of the shock event in milliseconds
- */
-void Experiment_Shock_Event(unsigned long duration)
-{
-  unsigned long start_time = millis();
-  tft.fillScreen(RED);
-  Serial.println("[STARTED] Shock stimulus event");
-  digitalWrite(CAPACITOR_DISCHARGE_RESISTOR_PIN, LOW);
-  digitalWrite(POWER_SOURCE_RELAY_PIN, HIGH);
-  while ((millis() - start_time) < duration)
-  {
-    for (int i = FIRST_SHOCK_BAR; i <= LAST_SHOCK_BAR; i++)
-    {
-      digitalWrite(i, HIGH);
-      delay(shock_bars_activation_delay_in_ms);
-      digitalWrite(i, LOW);
-    }
+void Discharge(){
+  digitalWrite(SOURCE, LOW);
+  unsigned long timeLimit = dischargeTime * 1000;
+  unsigned long startMillis = millis();
+  tft.setTextColor(RED);
+  tft.println("");
+  tft.println("Por seguridad, espera en lo que se descarga el capacitor.");
+  while(millis() - startMillis < (timeLimit)){
+    digitalWrite(RESISTOR, HIGH);
   }
-  for (int i = FIRST_SHOCK_BAR; i <= LAST_SHOCK_BAR; i++)
+  digitalWrite(RESISTOR, LOW);
+}
+
+/* -------------------------------------------------------------------------- */
+/*                          Save Data to microSD card                         */
+
+void SaveData(){
+  HeaderScreen();
+  tft.setTextColor(BLUE);
+  tft.println("Almacenando los datos en la tarjeta SD");
+  tft.println("");
+
+  fileParams = SD.open("params.txt", FILE_WRITE);
+  delay(200);
+  dateStart = String(dayStart) + "/" +  String(monthStart) + "/" + String(yearStart);
+  timeStart = String(hourStart) + ":" + String(minuteStart) + ":" + String(secondStart);
+  dateEnd = String(dayEnd) + "/" + String(monthEnd) + "/" + String(yearEnd);
+  timeEnd = String(hourEnd) + ":" + String(minuteEnd) + ":" + String(secondEnd);
+  dataToSave = dayOfExperimentStr + "," + experimentAnimalStr + "," + dateStart + "," + timeStart + "," + dateEnd + "," + timeEnd + "," + experimentTotalTime + "," + temperature + "," + humidity + "," + explorationTimeStr + "," + toneFrequencyStr + "," + toneTimeStr + "," + stimulationTimeStr + "," + movementAnalysisTimeStr + "," + intervalTimeStr + "," + numberOfEvents + "," + experimentContext;
+  fileParams.println(dataToSave);
+  fileParams.close();
+  tft.setTextColor(BLACK);
+  tft.print("Parametros del experimento ... ");
+  SuccessMessage();
+}
+/* -------------------------------------------------------------------------- */
+
+/* -------------------------------------------------------------------------- */
+/*                              Exploration Time                              */
+/* -------------------------------------------------------------------------- */
+void Exploration(){
+  unsigned long timeLimit = intervalTime;
+  unsigned long startMillis = millis();
+  tft.setTextColor(BLACK);
+  tft.print("1. Exploracion del entorno ..... ");
+  while(millis() - startMillis < (timeLimit)){
+  
+  }
+  SuccessMessage();
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                Tone Stimulus                               */
+/* -------------------------------------------------------------------------- */
+void ToneActivation(){
+  unsigned int toneFreq = toneFrequency;
+  unsigned long timeLimit = toneTime;
+  unsigned long startMillis = millis();
+  tft.setTextColor(BLACK);
+  tft.print("2. Estimulacion auditiva ..... ");
+  while(millis() - startMillis < (timeLimit)){
+    tone(PAM8406, toneFreq);
+  }
+  SuccessMessage();
+  noTone(PAM8406);
+}
+
+/* -------------------------------------------------------------------------- */
+/*                       Floating Ground Bars Activation                      */
+/* -------------------------------------------------------------------------- */
+void Stimulus(){
+  unsigned long timeLimit = stimulationTime;
+  unsigned long startMillis = millis();
+  tft.setTextColor(BLACK);
+  tft.print("3. Estimulacion electrica ..... ");
+  digitalWrite(RESISTOR, LOW);
+  digitalWrite(SOURCE, HIGH);
+  while(millis() - startMillis < (timeLimit)){
+      for(int i=firstBAR; i<=lastBAR; i++)
+        {
+          digitalWrite(i, HIGH);
+          delay(5);
+          digitalWrite(i, LOW);
+        }
+  }
+  for(int i=firstBAR; i<=lastBAR; i++)
   {
     digitalWrite(i, LOW);
   }
-  Serial.println("[ENDED] Shock stimulus event");
-  digitalWrite(POWER_SOURCE_RELAY_PIN, LOW);
-  digitalWrite(CAPACITOR_DISCHARGE_RESISTOR_PIN, HIGH);
-} // End Experiment_Shock_Event()
-/* -------------------------------------------------------------------------- */
-volatile uint64_t current_sample = 0; // Counter for the current sample in the IST
-const uint16_t datalogger_frequency = 100;  // This frequency is set in Timer_1_Interrupt_Setup()
-const uint32_t max_samples = datalogger_frequency * 60;
-volatile uint16_t PIR_1_Data[max_samples];       // PIR 1 Sensor data vector
-volatile uint16_t PIR_2_Data[max_samples];       // PIR 2 Sensor data vector
-volatile uint16_t PIR_3_Data[max_samples];       // PIR 3 Sensor data vector
-/* -------------------------------------------------------------------------- */
-/**
- * It enables the time compare interrupt on Timer 1, which will trigger the interrupt service routine
- * (ISR) every time the timer reaches the value of OCR1A. The ISR will then call the function that
- * reads the sensors data and stores it in the sensors data vector. The function will run until the
- * current_sample variable reaches the maximum number of samples, which is calculated by multiplying
- * the duration of the experiment by the datalogger frequency
- *
- * @param duration The duration of the experiment in seconds
- */
-void Experiment_Motion_Detection_Event()
+  SuccessMessage();
+  digitalWrite(SOURCE, LOW);
+  digitalWrite(RESISTOR, HIGH);
+}
+int pir_1, pir_2, pir_3;
+float current_sample = 0;
+bool motion;
+int max_samples = 6000;
+void UpdatePIR()
 {
-  tft.fillScreen(YELLOW);
-  // uint64_t Max_Samples = duration * datalogger_frequency; // Maximum number of samples for the sensors data vector
-  Serial.println("[STARTED] Motion detection event");
-  while (current_sample <= max_samples)
-  {
-    // Enable time compare interrupt on Timer 1
-    TIMSK1 = 1 << OCIE1A;
-  }
-  TIMSK1 = 0 << OCIE1A; // Disable time compare interrupt on Timer 1
-  current_sample = 0;   // Resets current_sample variable to 0
-  Serial.println("[ENDED] Motion detection event");
-} // End Experiment_Motion_Detection_Event()
-/* -------------------------------------------------------------------------- */
-/**
- * Set the timer 1 control registers to use a 64 prescaler and CTC mode, and set the compare match
- * register to 2499
- */
-void Timer_1_Interrupt_Setup()
-{
-  // Using Timer 1 for 100 Hz events
-  TCCR1A = 0; // Set entire TCCR1A register to 0
-  TCCR1B = 0; // Set entire TCCR1B register to 0
-  TCNT1 = 0;  // Initialize the counter to 0
-  // Set bits for 64 prescaler and CTC mode
-  TCCR1B = 1 << WGM12 | 0 << CS12 | 1 << CS11 | 1 << CS10;
-  OCR1A = 2499; // Set comparte match register to 100 Hz increments
-} // End Timer_1_Interrupt_Setup()
-/* -------------------------------------------------------------------------- */
-/**
- * The function is called when the timer reaches the value specified in the OCR1A register
- */
-ISR(TIMER1_COMPA_vect)
-{
-  // Timer 1 Interruption Service Routine
-  PIR_1_Data[current_sample] = analogRead(PIR_1_ANALOG_PIN);
-  PIR_2_Data[current_sample] = analogRead(PIR_2_ANALOG_PIN);
-  PIR_3_Data[current_sample] = analogRead(PIR_3_ANALOG_PIN);
+  filePIR.print(analogRead(PIR1));
+  filePIR.print(",");
+  filePIR.print(analogRead(PIR2));
+  filePIR.print(",");
+  filePIR.print(analogRead(PIR3));
+  filePIR.print(";");
   current_sample++;
-} // End ISR(TIMER1_COMPA_vect)
+} 
 /* -------------------------------------------------------------------------- */
-/**
- * This function will wait for a specified amount of time and then return
- *
- * @param duration The duration of the waiting event in milliseconds.
- */
-void Experiment_Waiting_Event(unsigned long duration)
-{
-  unsigned long start_time = millis();
-  tft.fillScreen(MAGENTA);
-  Serial.println("[STARTED] Waiting event");
-  while ((millis() - start_time) < duration)
+/*                              Motion Detection                              */
+/* -------------------------------------------------------------------------- */
+void MotionDetection(){
+  filePIR = SD.open("pir_data.txt", FILE_WRITE);
+  delay(200);
+  tft.setTextColor(BLACK);
+  current_sample = 0;
+  Timer1.initialize(10000);
+  Timer1.attachInterrupt(UpdatePIR);
+  while(current_sample < max_samples)
   {
+    interrupts();
+    Serial.println(current_sample);
   }
-  Serial.println("[ENDED] Waiting event");
-} // End Experiment_Waiting_Event()
-/* -------------------------------------------------------------------------- */
-/**
- * It converts the strings that were received from the serial port into integers
- */
-void Received_UART_Data_Conversion()
-{
-  exploration_duration = exploration_duration_str.toInt();
-  tone_frequency = tone_frequency_str.toInt();
-  tone_duration = tone_duration_str.toInt() * 1000;
-  shock_duration = shock_duration_str.toInt() * 1000;
-  movement_register_duration = movement_register_duration_str.toInt();
-  waiting_interval_duration = waiting_interval_duration_str.toInt() * 1000;
-  number_of_experiments_to_do = number_of_experiments_to_do_str.toInt();
-} // End Received_UART_Data_Conversion()
-/* -------------------------------------------------------------------------- */
-void Full_Experiment()
-{
-  unsigned long experiment_start_in_ms;
-  unsigned long experiment_stop_in_ms;
-  DS3231_get(&t);
-  start_experiment_date = String(t.mday) + "," + String(t.mon) + "," + String(t.year);
-  start_experiment_time = String(t.hour) + "," + String(t.min) + "," + String(t.sec);
-  experiment_start_in_ms = millis();
-  for (int i = 1; i <= number_of_experiments_to_do; i++)
-  {
-    TFT_Header();
-    Serial.println("[STARTED] Event " + String(i));
-    Experiment_Exploration_Event(exploration_duration);
-    Experiment_Tone_Event(tone_duration);
-    Experiment_Shock_Event(shock_duration);
-    Experiment_Motion_Detection_Event();
-    Experiment_Waiting_Event(waiting_interval_duration);
-    Serial.println("[STARTED] Event " + String(i));
-    delay(2000);
-  }
-  experiment_stop_in_ms = millis();
-  experiment_duration_in_ms = experiment_start_in_ms - experiment_stop_in_ms;
-  DS3231_get(&t);
-  end_experiment_date = String(t.mday) + "," + String(t.mon) + "," + String(t.year);
-  end_experiment_time = String(t.hour) + "," + String(t.min) + "," + String(t.sec);
-  button_1_status = LOW;
+  filePIR.println("");
+  noInterrupts();
+  current_sample = 0;
+  filePIR.close();
+  SuccessMessage();
+}
 
-  TFT_Main_Screen();
+/* -------------------------------------------------------------------------- */
+/*                         Waiting Time Between Events                        */
+/* -------------------------------------------------------------------------- */
+void Wait(){
+  unsigned long timeLimit = intervalTime;
+  unsigned long startMillis = millis();
+  tft.setTextColor(BLACK);
+  tft.print("5. Intervalo de espera ..... ");
+  while(millis() - startMillis < (timeLimit)){
+    
+  }
+  SuccessMessage();
+}
+
+/* -------------------------------------------------------------------------- */
+/*                    String to Integer variable conversion                   */
+/* -------------------------------------------------------------------------- */
+void VariableConversion(){
+  toneFrequency = toneFrequencyStr.toInt();
+  toneTime = toneTimeStr.toInt() * 1000;
+  stimulationTime = stimulationTimeStr.toInt() * 1000;
+  movementAnalysisTime = movementAnalysisTimeStr.toInt() * 1000;
+  intervalTime = intervalTimeStr.toInt() * 1000;
+  numberOfEvents = numberOfEventsStr.toInt();
+}
+
+/* -------------------------------------------------------------------------- */
+/*                            Full Experiment Event                           */
+/* -------------------------------------------------------------------------- */
+void Experiment(){
+  ReadDTH();
+  /* -------------------------- Data Type Conversion -------------------------- */
+  VariableConversion();
+  /* ----------------------- Experiment Start Clock Data ---------------------- */
+  GetClock();
+  dayStart = day;
+  monthStart = month;
+  yearStart = year;
+  hourStart = hour;
+  minuteStart = minute;
+  secondStart = seconds;
+  /* --------------- Repetition of events during the experiment --------------- */
+  filePIR = SD.open("pir.txt", FILE_WRITE);
+  filePIR.print("|");
+  if (filePIR){
+    experimentStart = millis();
+    for(int i= 1; i<=numberOfEvents; i++){
+      HeaderScreen();
+      filePIR.print("e" + String(i) + ",");
+      tft.setTextColor(BLACK);
+      tft.println("Iniciando el evento " + String(i));
+      tft.println("");
+      tft.println("");
+      tft.setTextColor(BLACK);
+      Exploration();
+      ToneActivation();
+      Stimulus();
+      MotionDetection();
+      Wait();
+      tft.println("");
+      tft.println("");
+      tft.setTextColor(RED);
+      tft.println("Finalizo el evento " + String(i));
+      delay(3000);
+    }
+    filePIR.close();
+  }
+  else{
+    tft.setTextColor(RED);
+    tft.println("Error al amacenar parametros en SD");
+  }
+  experimentEnd = millis();
+  experimentTotalTime = (experimentEnd - experimentStart) / 1000;
+  /* ------------------------ Experiment End Clock Data ----------------------- */
+  GetClock();
+  dayEnd = day;
+  monthEnd = month;
+  yearEnd = year;
+  hourEnd = hour;
+  minuteEnd = minute;
+  secondEnd = seconds;
+  /* --------------------- Save data into the microSD card -------------------- */
+  //SaveData(); // Call to function is avoided due to errors in writing data to SD
+  dateStart = String(dayStart) + "/" +  String(monthStart) + "/" + String(yearStart);
+  timeStart = String(hourStart) + ":" + String(minuteStart) + ":" + String(secondStart);
+  dateEnd = String(dayEnd) + "/" + String(monthEnd) + "/" + String(yearEnd);
+  timeEnd = String(hourEnd) + ":" + String(minuteEnd) + ":" + String(secondEnd);
+  fileParams = SD.open("params.txt", FILE_WRITE);
+  if(fileParams){
+    fileParams.print(String(temperature) + ",");
+    fileParams.print(String(humidity) + ",");
+    fileParams.print(dateStart + ",");
+    fileParams.print(timeStart + ",");
+    fileParams.print(dateEnd + ",");
+    fileParams.print(timeEnd);
+    fileParams.close();
+  }
+  else{
+    tft.setTextColor(RED);
+    tft.println("Error al amacenar parametros en SD");
+  }
+  /* ----------------------------- Reset variables ---------------------------- */
+  status1 = LOW;
+  status2 = LOW;
+  signalPIR1 = "";
+  signalPIR2 = "";
+  signalPIR3 = "";
+  /* ------------------------------- Main Screen ------------------------------ */
+  MainScreen();
 }
 
 /* -------------------------------------------------------------------------- */
 /*                              Current Reading                               */
 /* -------------------------------------------------------------------------- */
-void Shock_Current_Calibration()
-{
-  int voltage_reading_for_current_estimation;
-
-  button_2_status = LOW;
-  digitalWrite(CAPACITOR_DISCHARGE_RESISTOR_PIN, LOW);
-  digitalWrite(POWER_SOURCE_RELAY_PIN, HIGH);
-
-  TFT_Header();
-  tft.println("Shock current estimation");
+void Calibration(){
+  status2 = LOW;
+  digitalWrite(SOURCE, HIGH);
+  digitalWrite(RESISTOR, LOW);
+  int voltageReading;
+  HeaderScreen();
+  tft.println("Estimacion de la corriente de estimulacion");
   tft.println("");
-  tft.println("Press 2 to exit Calibration Mode");
+  tft.setTextColor(BLACK);
+  tft.println("Asegurate de conectar correctamente los cables banana-caiman al animal antes de iniciar la calibracion.");
+  tft.setTextColor(RED);
+  tft.println("");
+  tft.println("Presiona 2 para establecer el valor de la corriente");
+  tft.println("");
   tft.println("");
   tft.setTextSize(2);
-
-  while (button_2_status == LOW)
-  {
-    button_2_status = digitalRead(BUTTON_2_PIN);
-    voltage_reading_for_current_estimation = analogRead(SHOCK_VOLTAGE_ESTIMATION_ANALOG_PIN);
-    current_estimation_value = ((voltage_reading_for_current_estimation * float(5) / (float(1023) * calibration_resistor_value)));
-    tft.setTextColor(RED, WHITE);
-    tft.setCursor(0, 80);
-    tft.println("Current: " + String(current_estimation_value * 1000) + " mA");
+  while(status2 == LOW){
+    status2 = digitalRead(pushButton2);
+    voltageReading = analogRead(VOLTAGEREAD);
+    currentValue = ((voltageReading * float(5) / (float(1023) * calibrationResistor)));
+    tft.setTextColor(BLUE, WHITE);
+    tft.setCursor(0,80);
+    tft.println("Corriente: " + String(currentValue*1000)+ " mA");
   }
-
-  Capacitor_Discharge(capacitor_discharge_time_in_sec * 1000);
-
-  button_2_status = LOW;
+  tft.setTextSize(1);
+  tft.println("");
+  Discharge();
+  status1 = LOW;
+  status2 = LOW;
 }
+
 /* -------------------------------------------------------------------------- */
-void Waiting_for_Web_Server_Parameters()
-{
-  if (Serial1.available())
-  {
-    int ind1, ind2, ind3, ind4, ind5, ind6, ind7, ind8, ind9;
+/*                                    UART                                    */
+/* -------------------------------------------------------------------------- */
+void UART(){
+  
+  if(Serial1.available()){
 
-    received_str = Serial1.readString();
-    Serial.println("[SUCCESS] Parameters were received");
-    Serial.println(received_str);
-    if (received_str)
-    {
-      received_parameters_confirmation = true;
-      TFT_Header();
+    int ind1;
+    int ind2;
+    int ind3;
+    int ind4;
+    int ind5;
+    int ind6;
+    int ind7;
+    int ind8;
+    int ind9;
+
+    readString = Serial1.readString();
+    Serial.println(readString);
+    if(readString){
+
+      confirmed = true;
+
+      HeaderScreen();
       tft.setTextColor(BLUE);
-      tft.println("Experiment parameters");
+      tft.println("Parametros del protocolo de condicionamiento");
       tft.println("");
+      /* -------------------------- Split received string ------------------------- */
+      ind1 = readString.indexOf(','); 
+      dayOfExperimentStr = readString.substring(0, ind1); 
+      ind2 = readString.indexOf(',', ind1+1 );
+      experimentAnimalStr = readString.substring(ind1+1, ind2);
+      ind3 = readString.indexOf(',', ind2+1 );
+      explorationTimeStr = readString.substring(ind2+1, ind3);
+      ind4 = readString.indexOf(',', ind3+1 );
+      toneFrequencyStr = readString.substring(ind3+1, ind4);
+      ind5 = readString.indexOf(',', ind4+1 );
+      toneTimeStr = readString.substring(ind4+1, ind5);
+      ind6 = readString.indexOf(',', ind5+1 );
+      stimulationTimeStr = readString.substring(ind5+1, ind6);
+      ind7 = readString.indexOf(',', ind6+1 );
+      movementAnalysisTimeStr = readString.substring(ind6+1, ind7);
+      ind8 = readString.indexOf(',', ind7+1 );
+      intervalTimeStr = readString.substring(ind7+1, ind8);
+      ind9 = readString.indexOf(',', ind8+1 );
+      numberOfEventsStr = readString.substring(ind8+1, ind9);
+      experimentContext = readString.substring(ind9+1);
 
-      ind1 = received_str.indexOf(',');
-      experiment_day_str = received_str.substring(0, ind1);
-      ind2 = received_str.indexOf(',', ind1 + 1);
-      animal_strain_str = received_str.substring(ind1 + 1, ind2);
-      ind3 = received_str.indexOf(',', ind2 + 1);
-      exploration_duration_str = received_str.substring(ind2 + 1, ind3);
-      ind4 = received_str.indexOf(',', ind3 + 1);
-      tone_frequency_str = received_str.substring(ind3 + 1, ind4);
-      ind5 = received_str.indexOf(',', ind4 + 1);
-      tone_duration_str = received_str.substring(ind4 + 1, ind5);
-      ind6 = received_str.indexOf(',', ind5 + 1);
-      shock_duration_str = received_str.substring(ind5 + 1, ind6);
-      ind7 = received_str.indexOf(',', ind6 + 1);
-      movement_register_duration_str = received_str.substring(ind6 + 1, ind7);
-      ind8 = received_str.indexOf(',', ind7 + 1);
-      waiting_interval_duration_str = received_str.substring(ind7 + 1, ind8);
-      ind9 = received_str.indexOf(',', ind8 + 1);
-      number_of_experiments_to_do_str = received_str.substring(ind8 + 1, ind9);
-      experiment_context_str = received_str.substring(ind9 + 1);
-
-      if (experiment_day_str == "0" || animal_strain_str == "0" || exploration_duration_str == "0" || tone_frequency_str == "0" || tone_duration_str == "0" || shock_duration_str == "0" || movement_register_duration_str == "0" || waiting_interval_duration_str == "0" || number_of_experiments_to_do_str == "0" || experiment_context_str == "0")
-      {
-        tft.setTextColor(RED);
-        tft.println("Se ingreso algun parametro de forma incorrecta, verifica tus datos y repite la operacion");
-        received_parameters_confirmation = false;
-      }
-      else
-      {
-        tft.setTextColor(BLACK);
-        tft.println("Day: " + experiment_day_str);
-        tft.println("Animal ID: " + animal_strain_str);
-        tft.println("Exploration duration: " + exploration_duration_str + " s");
-        tft.println("Tone frequency: " + tone_frequency_str + " Hz");
-        tft.println("Tone duration: " + tone_duration_str + " s");
-        tft.println("Shock duration: " + shock_duration_str + " s");
-        tft.println("Movement detection duration: " + movement_register_duration_str + " s");
-        tft.println("Waiting interval duration: " + waiting_interval_duration_str + " s");
-        tft.println("Number of events: " + number_of_experiments_to_do_str);
-        tft.println("Experiment context: " + experiment_context_str);
-        received_parameters_confirmation = true;
-      }
+        if(dayOfExperimentStr == "0" || experimentAnimalStr == "0" || explorationTimeStr == "0" || toneFrequencyStr == "0" || toneTimeStr == "0" || stimulationTimeStr == "0" || movementAnalysisTimeStr == "0" || intervalTimeStr == "0" || numberOfEventsStr == "0" || experimentContext == "0"){
+          tft.setTextColor(RED);
+          tft.println("Se ingreso algun parametro de forma incorrecta, verifica tus datos y repite la operacion");
+          confirmed = false;
+        }
+        else{
+          /* ----------------------- Display received parameters ---------------------- */
+          tft.setTextColor(BLACK);
+          tft.println("Dia: " + dayOfExperimentStr);
+          tft.println("ID del animal: " + experimentAnimalStr);
+          tft.println("Tiempo de exploracion: " + explorationTimeStr + " s");
+          tft.println("Frecuencia de tono: " + toneFrequencyStr + " Hz");
+          tft.println("Tiempo de tono: " + toneTimeStr + " s");
+          tft.println("Tiempo de shock: " + stimulationTimeStr + " s");
+          tft.println("Tiempo de analisis: " + movementAnalysisTimeStr + " s");
+          tft.println("Tiempo de intervalo: " + intervalTimeStr + " s");
+          tft.println("Repeticiones del evento: " + numberOfEventsStr);
+          tft.println("Contexto del experimento: " + experimentContext);
+          confirmed = true;
+          fileParams = SD.open("params.txt", FILE_WRITE);
+          if(fileParams){
+            fileParams.print("|");
+            fileParams.print(dayOfExperimentStr + ",");
+            fileParams.print(experimentAnimalStr + ",");
+            fileParams.print(explorationTimeStr + ",");
+            fileParams.print(toneFrequencyStr + ",");
+            fileParams.print(toneTimeStr + ",");
+            fileParams.print(stimulationTimeStr + ",");
+            fileParams.print(movementAnalysisTimeStr + ",");
+            fileParams.print(intervalTimeStr + ",");
+            fileParams.print(numberOfEventsStr + ",");
+            fileParams.print(experimentContext+",");
+            fileParams.close();
+          }
+          else{
+            tft.setTextColor(RED);
+            tft.println("Error al amacenar parametros en SD");
+          }
+        }
     }
 
     tft.println("");
     tft.println("");
     tft.setTextColor(RED);
-    tft.println("Press 1 to start the experiment");
-
-    while (button_1_status == LOW)
-    {
-      button_1_status = digitalRead(BUTTON_1_PIN);
+    tft.println("Presiona 2 para continuar");
+    while (status2 == LOW) {
+      status2 = digitalRead(pushButton2);
     }
-    button_1_status = LOW;
+    status2 = LOW;
   }
 }
+/* -------------------------------------------------------------------------- */
+/**
+ * Set the timer 1 control registers to use a 64 prescaler and CTC mode, and set the compare match
+ * register to 2499
+ */
+// void Timer_1_Interrupt_Setup()
+// {
+//   // Using Timer 1 for 100 Hz events
+//   TCCR1A = 0; // Set entire TCCR1A register to 0
+//   TCCR1B = 0; // Set entire TCCR1B register to 0
+//   TCNT1 = 0;  // Initialize the counter to 0
+//   // Set bits for 64 prescaler and CTC mode
+//   TCCR1B = 1 << WGM12 | 0 << CS12 | 1 << CS11 | 1 << CS10;
+//   OCR1A = 2499; // Set comparte match register to 100 Hz increments
+//   TIMSK1 = 1<<OCIE1A; 
+// } // End Timer_1_Interrupt_Setup()
+/**
+ * The function is called when the timer reaches the value specified in the OCR1A register
+ */
 
-void setup()
-{
-  Serial.begin(115200);  // Serial Communication with PC
-  Serial1.begin(115200); // Serial Communication with ESP8266
-  Wire.begin();
+// ISR(TIMER1_COMPA_vect)
+// {
+//   pir_1 = analogRead(PIR1);
+//   pir_2 = analogRead(PIR2);
+//   pir_3 = analogRead(PIR3);
+//   // Timer 1 Interruption Service Routine
+// } // End ISR(TIMER1_COMPA_vect)
 
+
+/* -------------------------------------------------------------------------- */
+/*                                Arduino Setup                               */
+/* -------------------------------------------------------------------------- */
+void setup() {
+  /* -------------------------- Serial Communication -------------------------- */
+  Serial.begin(115200); // Arduino Mega2560
+  Serial1.begin(115200); // ESP8266
+  pinMode(PIN_SD_CS, OUTPUT);
+  /* ---------------------------- IC2 Communication --------------------------- */
+  Wire.begin(); 
+  /* -------------------------------- LCD Setup ------------------------------- */
   tft.reset();
   tft.begin(0x9341);
-
-  pinMode(CS_SD_PIN, OUTPUT);
-  pinMode(POWER_SOURCE_RELAY_PIN, OUTPUT);              // Power Source Relay
-  digitalWrite(POWER_SOURCE_RELAY_PIN, LOW);            // Relay is set to OFF
-  pinMode(LAMP_RELAY_PIN, OUTPUT);                      // Lamp SOURCE Relay
-  digitalWrite(LAMP_RELAY_PIN, lamp_status);            // Relay is set to OFF
-  pinMode(AUDIO_AMPLIFIER_PIN, OUTPUT);                 // Audio Amplifier
-  pinMode(DHT_PIN, INPUT);                              // DHT-22 Sensor
-  pinMode(PIR_1_ANALOG_PIN, INPUT);                     // PIR 1
-  pinMode(PIR_2_ANALOG_PIN, INPUT);                     // PIR 2
-  pinMode(PIR_3_ANALOG_PIN, INPUT);                     // PIR 3
-  pinMode(CAPACITOR_DISCHARGE_RESISTOR_PIN, OUTPUT);    // Cement Resistor Optocoupler
-  digitalWrite(CAPACITOR_DISCHARGE_RESISTOR_PIN, HIGH); // 19th optocoupler is set to ON
-  // Due to PCB design errors, the calibration optocoupler is discarded
-  // pinMode(CALIBRATION, OUTPUT);
+  /* -------------------------------- Pin Setup ------------------------------- */
+  pinMode(SOURCE, OUTPUT); // Power Source Relay
+  digitalWrite(SOURCE, LOW); // Relay is set to OFF
+  pinMode(LAMP, OUTPUT); // Lamp SOURCE Relay
+  digitalWrite(LAMP, statusLamp); // Relay is set to OFF
+  pinMode(PAM8406, OUTPUT); // Audio Amplifier 
+  pinMode(DHTPIN, INPUT); // DHT-22 Sensor
+  pinMode(PIR1, INPUT); // PIR 1
+  pinMode(PIR2, INPUT); // PIR 2
+  pinMode(PIR3, INPUT); // PIR 3
+  pinMode(RESISTOR, OUTPUT); // Cement Resistor Optocoupler
+  digitalWrite(RESISTOR, HIGH);  // 19th optocoupler is set to ON
+  // There is an error regarding the 20th optocoupler configuration
+  // using  the banana jack connectors, so it's discarded.
+  // pinMode(CALIBRATION, OUTPUT); 
   // digitalWrite(CALIBRATION, LOW);
-  pinMode(SHOCK_VOLTAGE_ESTIMATION_ANALOG_PIN, INPUT); // A15 is used to read calibration voltage and estimate the current
-  pinMode(BUTTON_1_PIN, INPUT);                        // Button 1
-  pinMode(BUTTON_2_PIN, INPUT);                        // Button 2
+  pinMode(VOLTAGEREAD, INPUT); // A15 is used to read calibration voltage and estimate the current 
+  pinMode(pushButton1, INPUT); // Button 1
+  pinMode(pushButton2, INPUT); // Button 2
   // 1st - 18th optocouplers pins are configured
-  for (int i = FIRST_SHOCK_BAR; i <= LAST_SHOCK_BAR; i++)
+  for(int i=firstBAR; i<=lastBAR; i++)
   {
     pinMode(i, OUTPUT);
   }
+  /* ------------------------------ DS3231 Setup ------------------------------ */
   DS3231_init(DS3231_CONTROL_INTCN);
-#ifdef SET_RTC
-  t.hour = setHour;
-  t.min = setMin;
-  t.sec = setSec;
-  t.mday = setDay;
-  t.mon = setMonth;
-  t.year = setYear;
-  DS3231_set(t);
-#endif
+  if(DEBUG_RTC == 1){
+    t.hour=setHour; 
+    t.min=setMin;
+    t.sec=setSec;
+    t.mday=setDay;
+    t.mon=setMonth;
+    t.year=setYear;
+    DS3231_set(t);
+  }
+  /* ------------------------------- DTH22 Setup ------------------------------ */
   dht.begin();
-  TFT_Startup_Screen();
-  TFT_Main_Screen();
+  /* --------------------------------- Screens -------------------------------- */
+  StartScreen();
+  delay(50);
+  MainScreen();
+  // cli();
+  // Timer_1_Interrupt_Setup();
+  // sei();
 }
 
-void loop()
-{
-
-  Waiting_for_Web_Server_Parameters();
-  if (received_parameters_confirmation == true)
-  {
-    Received_UART_Data_Conversion();
-    Full_Experiment();
-    received_parameters_confirmation = false;
-  }
-  // button_1_status = digitalRead(BUTTON_1_PIN);
-  // if (button_1_status == HIGH)
-  // {
-  //   button_1_status = LOW;
-  // }
-  button_2_status = digitalRead(BUTTON_2_PIN);
-  if (button_2_status == HIGH)
-  {
-    Shock_Current_Calibration();
-    TFT_Main_Screen();
-  }
+/* -------------------------------------------------------------------------- */
+/*                                    Main                                    */
+/* -------------------------------------------------------------------------- */
+void loop() {
+    noInterrupts();
+    UART();
+    if(confirmed == true){
+      Experiment();
+      confirmed = false;
+    }
+    digitalWrite(RESISTOR, HIGH);
+    status1 = digitalRead(pushButton1);
+    if(status1 == HIGH)
+    {
+      Calibration();
+      digitalWrite(SOURCE, LOW);
+      MainScreen();
+      digitalWrite(RESISTOR, HIGH);
+    }
+    status2 = digitalRead(pushButton2);
+    if(status2 == HIGH){
+      statusLamp = !statusLamp;
+      digitalWrite(LAMP, statusLamp);
+      delay(100);
+      status2 = LOW;
+    }
 }
