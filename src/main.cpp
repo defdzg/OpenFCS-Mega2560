@@ -11,11 +11,27 @@
 #include <TimerOne.h>
 #include <PriUint64.h>
 /* -------------------------------------------------------------------------- */
-#define LCD_CS A3
-#define LCD_CD A2
-#define LCD_WR A1
+#define DC_170VDC_SOURCE 22
+#define LAMP_120VAC_SOURCE 23
+#define DHT_PIN 24
+#define AUDIO_AMPLIFIER_PIN 25
+#define PUSH_BUTTON_1_PIN 26
+#define PUSH_BUTTON_2_PIN 27
+#define FIRST_BAR_PIN 28
+#define LAST_BAR_PIN 45
+#define UNLOAD_RESISTOR_PIN 46
+#define SD_CS_PIN 53
+
 #define LCD_RD A0
+#define LCD_WR A1
+#define LCD_CD A2
+#define LCD_CS A3
 #define LCD_RESET A4
+#define PIR_1_ADC_PIN A12
+#define PIR_2_ADC_PIN A13
+#define PIR_3_ADC_PIN A14
+#define SHOCK_CURRENT_ESTIMATION_ADC_PIN A15
+
 #define BLACK 0x0000
 #define BLUE 0x001F
 #define RED 0xF800
@@ -24,31 +40,14 @@
 #define MAGENTA 0xF81F
 #define YELLOW 0xFFE0
 #define WHITE 0xFFFF
-String firmware_version = "2.0";
-#define DC_170VDC_SOURCE 22
-#define LAMP_120VAC_SOURCE 23
-#define AUDIO_AMPLIFIER_PIN 25
-#define PUSH_BUTTON_1_PIN 26
-#define PUSH_BUTTON_2_PIN 27
+
 volatile byte push_button_1_status = LOW;
 volatile byte push_button_2_status = LOW;
-#define FIRST_BAR_PIN 28
-#define LAST_BAR_PIN 45
-#define UNLOAD_RESISTOR_PIN 46
-uint8_t capacitor_discharge_time_in_seconds = 60;
-#define SHOCK_CURRENT_ESTIMATION_ADC_PIN A15
 volatile uint32_t shock_current_estimation = 0;
 float calibration_voltage_divider_resistor = 993 + 270;
-#define PIR_1_ADC_PIN A12
-#define PIR_2_ADC_PIN A13
-#define PIR_3_ADC_PIN A14
-#define SD_CS_PIN 53
+uint8_t capacitor_discharge_time_in_seconds = 60;
 
-Elegoo_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
-
-File file_experiment_configuration;
-File file_pir_samples;
-
+String firmware_version = "2.0";
 String received_str;
 String experiment_day_number_str;
 String animal_id_srt;
@@ -61,13 +60,9 @@ String between_events_time_str;
 String number_of_total_events_str;
 String experiment_context;
 
-volatile bool esp8266_sent_configuration_data = false;
-
-uint64_t experiment_total_millis;
+Elegoo_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
 /* -------------------------------------------------------------------------- */
-#define DHT_PIN 24
-#define DHT_TYPE DHT22
-DHT dht(DHT_PIN, DHT_TYPE);
+DHT dht(DHT_PIN, DHT22);
 float temperature, humidity;
 void retrieve_dht_data()
 {
@@ -301,6 +296,7 @@ void experiment_shock_event()
   tft_success_flag();
 }
 /* -------------------------------------------------------------------------- */
+File file_pir_samples;
 uint64_t current_sample, max_samples;
 float interrupt_timer_in_microseconds;
 uint64_t data_logger_frequency_in_hz = 100;
@@ -363,6 +359,8 @@ void experiment_between_event()
   tft_success_flag();
 }
 /* -------------------------------------------------------------------------- */
+File file_experiment_configuration;
+uint64_t experiment_total_millis;
 void save_experiment_configuration_data_to_sd()
 {
   String new_experiment = current_path + "config.txt";
@@ -447,6 +445,7 @@ void shock_current_calibration()
   push_button_2_status = LOW;
 }
 /* -------------------------------------------------------------------------- */
+volatile bool esp8266_sent_configuration_data = false;
 void esp8266_serial_event()
 {
 
