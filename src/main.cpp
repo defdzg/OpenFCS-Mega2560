@@ -1,3 +1,10 @@
+/**
+ * @file main.cpp
+ * @author Daniel Fernández (defdzg@gmail.com)
+ * @version 2.0
+ * @date 2023-03-21
+ *
+ */
 /* ------------------------------ Dependencies ------------------------------ */
 #include <Arduino.h>         // Arduino framework library
 #include <Elegoo_GFX.h>      // Elegoo graphics library
@@ -155,7 +162,8 @@ void initialize_external_modules()
   if (!SD.begin(SD_CS_PIN))
   {
     tft_error_flag();
-    while (1);
+    while (1)
+      ;
   }
   else
   {
@@ -251,6 +259,10 @@ void tft_main()
   tft.println("Presiona 2 para encender la lampara");
 }
 /* -------------------------------------------------------------------------- */
+/**
+ * The function tft_power_on() is called when the Arduino is powered on. It displays the name of the
+ * university on the screen
+ */
 void tft_power_on()
 {
   tft_header();
@@ -261,9 +273,9 @@ void tft_power_on()
 /* -------------------------------------------------------------------------- */
 /**
  * Convert a value in seconds to milliseconds.
- * 
+ *
  * @param value The value to convert to milliseconds.
- * 
+ *
  * @return The return value is a uint64_t.
  */
 uint64_t to_mills(uint8_t value)
@@ -302,6 +314,9 @@ void experiment_exploration_event()
   tft_success_flag();
 }
 /* -------------------------------------------------------------------------- */
+/**
+ * The function generates a tone of a given frequency for a given time
+ */
 void experiment_tone_event()
 {
   uint64_t tone_frequency = tone_frequency_str.toInt();
@@ -317,6 +332,10 @@ void experiment_tone_event()
   noTone(AUDIO_AMPLIFIER_PIN);
 }
 /* -------------------------------------------------------------------------- */
+/**
+ * The function is called experiment_shock_event() and it's purpose is to turn on the DC power supply
+ * and turn off the unload resistor, then turn on the bars one by one for a period of time
+ */
 void experiment_shock_event()
 {
   uint64_t limit_time = to_mills(shock_time_str.toInt());
@@ -348,6 +367,9 @@ uint64_t current_sample, max_samples;
 float interrupt_timer_in_microseconds;
 uint64_t data_logger_frequency_in_hz = 100;
 unsigned long startMillis, stopMillis, totalMillis;
+/**
+ * Read the analog values from the PIR sensors and save them to the SD card
+ */
 void read_analog_pir_sample_and_save_to_sd()
 {
   int sensor_reading_pir_1 = analogRead(PIR_1_ADC_PIN);
@@ -361,6 +383,11 @@ void read_analog_pir_sample_and_save_to_sd()
   current_sample++;
 }
 /* -------------------------------------------------------------------------- */
+/**
+ * It enables ISR that calls read_analog_pir_sample_and_save_to_sd() to start datalogging.
+ *
+ * @param current_event This is the current event number.
+ */
 void experiment_motion_recording_event(int current_event)
 {
   uint64_t motion_recording_time = motion_recording_time_str.toInt();
@@ -393,6 +420,9 @@ void experiment_motion_recording_event(int current_event)
   }
 }
 /* -------------------------------------------------------------------------- */
+/**
+ * The function waits for a time period specified by the user
+ */
 void experiment_between_event()
 {
   uint64_t limit_time = to_mills(between_events_time_str.toInt());
@@ -408,6 +438,9 @@ void experiment_between_event()
 /* -------------------------------------------------------------------------- */
 File file_experiment_configuration;
 uint64_t experiment_total_millis;
+/**
+ * It writes the current time, date, and experiment configuration parameters to a file on the SD card
+ */
 void save_experiment_configuration_data_to_sd()
 {
   String new_experiment = current_path + "config.txt";
@@ -433,6 +466,9 @@ void save_experiment_configuration_data_to_sd()
   }
 }
 /* -------------------------------------------------------------------------- */
+/**
+ * It's a function that runs the full experiment
+ */
 void full_experiment()
 {
   retrieve_rtc_date_and_time();
@@ -461,6 +497,9 @@ void full_experiment()
   tft_main();
 }
 /* -------------------------------------------------------------------------- */
+/**
+ * This function is used to calibrate the shock current
+ */
 void shock_current_calibration()
 {
   push_button_1_status = LOW;
@@ -493,6 +532,11 @@ void shock_current_calibration()
 }
 /* -------------------------------------------------------------------------- */
 volatile bool esp8266_sent_configuration_data = false;
+/**
+ * It reads the data sent by the ESP8266 and stores it in a string. Then, it parses the string and
+ * stores the data in different variables. Finally, it prints the data on the screen and waits for the
+ * user to press a button to start the experiment
+ */
 void esp8266_serial_event()
 {
 
@@ -581,6 +625,9 @@ void esp8266_serial_event()
 }
 /* -------------------------------------------------------------------------- */
 volatile byte status_lamp = LOW;
+/**
+ * The function `turn_on_off_lamp()` turns on and off the lamp.
+ */
 void turn_on_off_lamp()
 {
   status_lamp = !status_lamp;
@@ -588,6 +635,11 @@ void turn_on_off_lamp()
   delay(1000);
 }
 /* -------------------------------------------------------------------------- */
+/**
+ * The setup() function initializes the serial ports, the SD card, the I2C bus, the TFT display, the DC
+ * power source, the lamp power source, the audio amplifier, the DHT sensor, the PIR sensors, the
+ * unload resistor, the shock current estimation ADC, the push buttons, and the bars
+ */
 void setup()
 {
   Serial.begin(115200);
@@ -622,6 +674,12 @@ void setup()
   tft_main();
 }
 /* -------------------------------------------------------------------------- */
+/**
+ * The function is called every time the Arduino is looping through its code. It checks to see if the
+ * ESP8266 has sent any data to the Arduino. If it has, it calls the function that runs the experiment.
+ * It also checks to see if the push buttons have been pressed. If they have, it calls the appropriate
+ * function
+ */
 void loop()
 {
   esp8266_serial_event();
