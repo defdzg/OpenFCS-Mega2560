@@ -1,16 +1,15 @@
 /* ------------------------------ Dependencies ------------------------------ */
-#include <Arduino.h>
-#include <Elegoo_GFX.h>
-#include <Elegoo_TFTLCD.h>
-#include <Wire.h>
-#include <SPI.h>
-#include <DHT.h>
-#include <DS3231.h>
-#include <Wire.h>
-#include <Adafruit_Sensor.h>
-#include <SD.h>
-#include <TimerOne.h>
-#include <PriUint64.h>
+#include <Arduino.h> // Arduino framework library
+#include <Elegoo_GFX.h> // Elegoo graphics library
+#include <Elegoo_TFTLCD.h> // Elegoo TFT display library
+#include <Wire.h> // I2C library for Arduino
+#include <SPI.h> // Serial Peripheral Interface (SPI) library
+#include <DHT.h> // DHT sensors library
+#include <DS3231.h> // Arduino library for the DS3231 Real-Time Clock chip
+#include <Adafruit_Sensor.h> // Adafruit Sensor libray
+#include <SD.h> //  SD library
+#include <TimerOne.h> // Interrupt and PWM utilities for Timer1
+#include <PriUint64.h> // Print uint64_t using Arduino
 /* ------------------------------ Digital pins ------------------------------ */
 #define DC_170VDC_SOURCE 22 // Power supply 170VDC relay pin
 #define LAMP_120VAC_SOURCE 23 // Lamp 110VAC relay pin
