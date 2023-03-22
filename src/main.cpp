@@ -1,3 +1,4 @@
+/* ------------------------------ Dependencies ------------------------------ */
 #include <Arduino.h>
 #include <Elegoo_GFX.h>
 #include <Elegoo_TFTLCD.h>
@@ -10,57 +11,53 @@
 #include <SD.h>
 #include <TimerOne.h>
 #include <PriUint64.h>
-/* -------------------------------------------------------------------------- */
-#define DC_170VDC_SOURCE 22
-#define LAMP_120VAC_SOURCE 23
-#define DHT_PIN 24
-#define AUDIO_AMPLIFIER_PIN 25
-#define PUSH_BUTTON_1_PIN 26
-#define PUSH_BUTTON_2_PIN 27
-#define FIRST_BAR_PIN 28
-#define LAST_BAR_PIN 45
-#define UNLOAD_RESISTOR_PIN 46
-#define SD_CS_PIN 53
-
-#define LCD_RD A0
-#define LCD_WR A1
-#define LCD_CD A2
-#define LCD_CS A3
-#define LCD_RESET A4
-#define PIR_1_ADC_PIN A12
-#define PIR_2_ADC_PIN A13
-#define PIR_3_ADC_PIN A14
-#define SHOCK_CURRENT_ESTIMATION_ADC_PIN A15
-
-#define BLACK 0x0000
-#define BLUE 0x001F
-#define RED 0xF800
-#define GREEN 0x07E0
-#define CYAN 0x07FF
-#define MAGENTA 0xF81F
-#define YELLOW 0xFFE0
-#define WHITE 0xFFFF
-
-volatile byte push_button_1_status = LOW;
-volatile byte push_button_2_status = LOW;
-volatile uint32_t shock_current_estimation = 0;
-float calibration_voltage_divider_resistor = 993 + 270;
-uint8_t capacitor_discharge_time_in_seconds = 60;
-
-String firmware_version = "2.0";
-String received_str;
-String experiment_day_number_str;
-String animal_id_srt;
-String exploration_time_str;
-String tone_frequency_str;
-String tone_time_srt;
-String shock_time_str;
-String motion_recording_time_str;
-String between_events_time_str;
-String number_of_total_events_str;
-String experiment_context;
-
-Elegoo_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
+/* ------------------------------ Digital pins ------------------------------ */
+#define DC_170VDC_SOURCE 22 // Power supply 170VDC relay pin
+#define LAMP_120VAC_SOURCE 23 // Lamp 110VAC relay pin
+#define DHT_PIN 24 // DHT-22 temperature and humidity sensor pin
+#define AUDIO_AMPLIFIER_PIN 25 // Audio amplifier tone output pin
+#define PUSH_BUTTON_1_PIN 26 // Push button 1 pin
+#define PUSH_BUTTON_2_PIN 27 // Push button 2 pin
+#define FIRST_BAR_PIN 28 // Arduino pin connected to the first bar optocoupler
+#define LAST_BAR_PIN 45 // Arduino pin connected to the last bar optocoupler
+#define UNLOAD_RESISTOR_PIN 46 // Arduino pin connected to the unload resistor optocoupler
+#define SD_CS_PIN 53 // SD chip-select pin
+/* ------------------------------- Analog pins ------------------------------ */
+#define LCD_RD A0 // TFT pin
+#define LCD_WR A1 // TFT pin
+#define LCD_CD A2 // TFT pin
+#define LCD_CS A3 // TFT pin
+#define LCD_RESET A4 // TFT pin
+#define PIR_1_ADC_PIN A12 // PIR 1 analog signal input pin
+#define PIR_2_ADC_PIN A13 // PIR 2 analog signal input pin
+#define PIR_3_ADC_PIN A14 // PIR 3 analog signal input pin
+#define SHOCK_CURRENT_ESTIMATION_ADC_PIN A15 // Shock current estimation input pin
+/* --------------------------- Application macros --------------------------- */
+#define BLACK 0x0000 // TFT color
+#define BLUE 0x001F // TFT color
+#define RED 0xF800 // TFT color
+#define GREEN 0x07E0 // TFT color
+#define CYAN 0x07FF // TFT color
+#define MAGENTA 0xF81F // TFT color
+#define YELLOW 0xFFE0 // TFT color
+#define WHITE 0xFFFF // TFT color
+volatile byte push_button_1_status = LOW; // Push button 1 status
+volatile byte push_button_2_status = LOW; // Push button 2 status
+volatile uint32_t shock_current_estimation = 0; // Shock current estimation value
+float calibration_voltage_divider_resistor = 993 + 270; // Voltage divider resistor value for current estimation
+uint8_t capacitor_discharge_time_in_seconds = 60; // Minimum safe capacitor discharge time in seconds
+String firmware_version = "2.0"; // Current firmware version
+String received_str; // UART received experiment parameters
+String experiment_day_number_str; // Experiment day (experiment parameter)
+String animal_id_srt; // Animal ID (experiment parameter)
+String exploration_time_str; // Exploration time (experiment parameter)
+String tone_frequency_str; // Tone frequency (experiment parameter)
+String tone_time_srt; // Tone duration time (experiment parameter)
+String shock_time_str; // Shock duration time (experiment parameter)
+String motion_recording_time_str; // Motion recording time (experiment parameter)
+String between_events_time_str; // Delay between events time (experiment parameter)
+String number_of_total_events_str; // Number of total experiments to repeat (experiment parameter)
+String experiment_context; // Experiment context 'A or B' (experiment parameter)
 /* -------------------------------------------------------------------------- */
 DHT dht(DHT_PIN, DHT22);
 float temperature, humidity;
@@ -112,6 +109,7 @@ void new_directory_path()
   SD.mkdir((char *)current_path.c_str());
 }
 /* -------------------------------------------------------------------------- */
+Elegoo_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
 void tft_error_flag()
 {
   tft.setTextColor(RED);
