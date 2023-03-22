@@ -1,0 +1,1 @@
+For configuration instructions and documentation, go to the repository wiki.
