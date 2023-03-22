@@ -1,63 +1,67 @@
 /* ------------------------------ Dependencies ------------------------------ */
-#include <Arduino.h> // Arduino framework library
-#include <Elegoo_GFX.h> // Elegoo graphics library
-#include <Elegoo_TFTLCD.h> // Elegoo TFT display library
-#include <Wire.h> // I2C library for Arduino
-#include <SPI.h> // Serial Peripheral Interface (SPI) library
-#include <DHT.h> // DHT sensors library
-#include <DS3231.h> // Arduino library for the DS3231 Real-Time Clock chip
+#include <Arduino.h>         // Arduino framework library
+#include <Elegoo_GFX.h>      // Elegoo graphics library
+#include <Elegoo_TFTLCD.h>   // Elegoo TFT display library
+#include <Wire.h>            // I2C library for Arduino
+#include <SPI.h>             // Serial Peripheral Interface (SPI) library
+#include <DHT.h>             // DHT sensors library
+#include <DS3231.h>          // Arduino library for the DS3231 Real-Time Clock chip
 #include <Adafruit_Sensor.h> // Adafruit Sensor libray
-#include <SD.h> //  SD library
-#include <TimerOne.h> // Interrupt and PWM utilities for Timer1
-#include <PriUint64.h> // Print uint64_t using Arduino
+#include <SD.h>              //  SD library
+#include <TimerOne.h>        // Interrupt and PWM utilities for Timer1
+#include <PriUint64.h>       // Print uint64_t using Arduino
 /* ------------------------------ Digital pins ------------------------------ */
-#define DC_170VDC_SOURCE 22 // Power supply 170VDC relay pin
-#define LAMP_120VAC_SOURCE 23 // Lamp 110VAC relay pin
-#define DHT_PIN 24 // DHT-22 temperature and humidity sensor pin
+#define DC_170VDC_SOURCE 22    // Power supply 170VDC relay pin
+#define LAMP_120VAC_SOURCE 23  // Lamp 110VAC relay pin
+#define DHT_PIN 24             // DHT-22 temperature and humidity sensor pin
 #define AUDIO_AMPLIFIER_PIN 25 // Audio amplifier tone output pin
-#define PUSH_BUTTON_1_PIN 26 // Push button 1 pin
-#define PUSH_BUTTON_2_PIN 27 // Push button 2 pin
-#define FIRST_BAR_PIN 28 // Arduino pin connected to the first bar optocoupler
-#define LAST_BAR_PIN 45 // Arduino pin connected to the last bar optocoupler
+#define PUSH_BUTTON_1_PIN 26   // Push button 1 pin
+#define PUSH_BUTTON_2_PIN 27   // Push button 2 pin
+#define FIRST_BAR_PIN 28       // Arduino pin connected to the first bar optocoupler
+#define LAST_BAR_PIN 45        // Arduino pin connected to the last bar optocoupler
 #define UNLOAD_RESISTOR_PIN 46 // Arduino pin connected to the unload resistor optocoupler
-#define SD_CS_PIN 53 // SD chip-select pin
+#define SD_CS_PIN 53           // SD chip-select pin
 /* ------------------------------- Analog pins ------------------------------ */
-#define LCD_RD A0 // TFT pin
-#define LCD_WR A1 // TFT pin
-#define LCD_CD A2 // TFT pin
-#define LCD_CS A3 // TFT pin
-#define LCD_RESET A4 // TFT pin
-#define PIR_1_ADC_PIN A12 // PIR 1 analog signal input pin
-#define PIR_2_ADC_PIN A13 // PIR 2 analog signal input pin
-#define PIR_3_ADC_PIN A14 // PIR 3 analog signal input pin
+#define LCD_RD A0                            // TFT pin
+#define LCD_WR A1                            // TFT pin
+#define LCD_CD A2                            // TFT pin
+#define LCD_CS A3                            // TFT pin
+#define LCD_RESET A4                         // TFT pin
+#define PIR_1_ADC_PIN A12                    // PIR 1 analog signal input pin
+#define PIR_2_ADC_PIN A13                    // PIR 2 analog signal input pin
+#define PIR_3_ADC_PIN A14                    // PIR 3 analog signal input pin
 #define SHOCK_CURRENT_ESTIMATION_ADC_PIN A15 // Shock current estimation input pin
 /* --------------------------- Application macros --------------------------- */
-#define BLACK 0x0000 // TFT color
-#define BLUE 0x001F // TFT color
-#define RED 0xF800 // TFT color
-#define GREEN 0x07E0 // TFT color
-#define CYAN 0x07FF // TFT color
-#define MAGENTA 0xF81F // TFT color
-#define YELLOW 0xFFE0 // TFT color
-#define WHITE 0xFFFF // TFT color
-volatile byte push_button_1_status = LOW; // Push button 1 status
-volatile byte push_button_2_status = LOW; // Push button 2 status
-volatile uint32_t shock_current_estimation = 0; // Shock current estimation value
+#define BLACK 0x0000                                    // TFT color
+#define BLUE 0x001F                                     // TFT color
+#define RED 0xF800                                      // TFT color
+#define GREEN 0x07E0                                    // TFT color
+#define CYAN 0x07FF                                     // TFT color
+#define MAGENTA 0xF81F                                  // TFT color
+#define YELLOW 0xFFE0                                   // TFT color
+#define WHITE 0xFFFF                                    // TFT color
+volatile byte push_button_1_status = LOW;               // Push button 1 status
+volatile byte push_button_2_status = LOW;               // Push button 2 status
+volatile uint32_t shock_current_estimation = 0;         // Shock current estimation value
 float calibration_voltage_divider_resistor = 993 + 270; // Voltage divider resistor value for current estimation
-uint8_t capacitor_discharge_time_in_seconds = 60; // Minimum safe capacitor discharge time in seconds
-String firmware_version = "2.0"; // Current firmware version
-String received_str; // UART received experiment parameters
-String experiment_day_number_str; // Experiment day (experiment parameter)
-String animal_id_srt; // Animal ID (experiment parameter)
-String exploration_time_str; // Exploration time (experiment parameter)
-String tone_frequency_str; // Tone frequency (experiment parameter)
-String tone_time_srt; // Tone duration time (experiment parameter)
-String shock_time_str; // Shock duration time (experiment parameter)
-String motion_recording_time_str; // Motion recording time (experiment parameter)
-String between_events_time_str; // Delay between events time (experiment parameter)
-String number_of_total_events_str; // Number of total experiments to repeat (experiment parameter)
-String experiment_context; // Experiment context 'A or B' (experiment parameter)
+uint8_t capacitor_discharge_time_in_seconds = 60;       // Minimum safe capacitor discharge time in seconds
+String firmware_version = "2.0";                        // Current firmware version
+String received_str;                                    // UART received experiment parameters
+String experiment_day_number_str;                       // Experiment day (experiment parameter)
+String animal_id_srt;                                   // Animal ID (experiment parameter)
+String exploration_time_str;                            // Exploration time (experiment parameter)
+String tone_frequency_str;                              // Tone frequency (experiment parameter)
+String tone_time_srt;                                   // Tone duration time (experiment parameter)
+String shock_time_str;                                  // Shock duration time (experiment parameter)
+String motion_recording_time_str;                       // Motion recording time (experiment parameter)
+String between_events_time_str;                         // Delay between events time (experiment parameter)
+String number_of_total_events_str;                      // Number of total experiments to repeat (experiment parameter)
+String experiment_context;                              // Experiment context 'A or B' (experiment parameter)
 /* -------------------------------------------------------------------------- */
+/**
+ * It reads the temperature and humidity from the DHT22 sensor and stores the values in the global
+ * variables temperature and humidity
+ */
 DHT dht(DHT_PIN, DHT22);
 float temperature, humidity;
 void retrieve_dht_data()
@@ -66,6 +70,7 @@ void retrieve_dht_data()
   humidity = dht.readHumidity();
 }
 /* -------------------------------------------------------------------------- */
+/* Setting the time and date of the RTC */
 DS3231 rtc;
 // #define DEBUG_RTC
 #ifdef DEBUG_RTC
@@ -89,6 +94,10 @@ void set_rtc_date_and_time()
 /* -------------------------------------------------------------------------- */
 byte hour, minute, seconds, day, month, year;
 bool century_bit, h12, hPM;
+/**
+ * This function retrieves the current date and time from the RTC and stores it in the variables hour,
+ * minute, seconds, day, month, and year
+ */
 void retrieve_rtc_date_and_time()
 {
   hour = rtc.getHour(h12, hPM);
@@ -100,6 +109,9 @@ void retrieve_rtc_date_and_time()
 }
 /* -------------------------------------------------------------------------- */
 String current_path;
+/**
+ * It creates a new directory path based on the current date and time
+ */
 void new_directory_path()
 {
   String parent_path = String(day) + String(month) + String(year) + "/";
@@ -109,6 +121,9 @@ void new_directory_path()
 }
 /* -------------------------------------------------------------------------- */
 Elegoo_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
+/**
+ * If the error flag is set, print the word "ERROR" in red
+ */
 void tft_error_flag()
 {
   tft.setTextColor(RED);
@@ -116,6 +131,9 @@ void tft_error_flag()
   tft.setTextColor(BLACK);
 }
 /* -------------------------------------------------------------------------- */
+/**
+ * This function prints the word "SUCCESS" in green on the TFT screen
+ */
 void tft_success_flag()
 {
   tft.setTextColor(GREEN);
@@ -123,22 +141,28 @@ void tft_success_flag()
   tft.setTextColor(BLACK);
 }
 /* -------------------------------------------------------------------------- */
+/**
+ * It checks if the SD card, the DHT sensor, the speaker and the lamp are working
+ */
 void initialize_external_modules()
 {
   tft.setTextColor(BLUE);
   tft.println("Inicializando modulos externos");
+
+  /* Checking if the SD card is working. */
   tft.setTextColor(BLACK);
   tft.print("SD ..... ");
   if (!SD.begin(SD_CS_PIN))
   {
     tft_error_flag();
-    while (1)
-      ;
+    while (1);
   }
   else
   {
     tft_success_flag();
   }
+
+  /* Checking if the DHT sensor is working. */
   tft.print("DHT ..... ");
   if (isnan(dht.readTemperature()) && isnan(dht.readHumidity()))
   {
@@ -150,11 +174,14 @@ void initialize_external_modules()
   {
     tft_success_flag();
   }
+
   tft.setTextColor(BLUE);
   tft.println("");
   tft.println("Presiona 2 para confirmar el funcionamiento correcto");
   tft.println("");
   tft.setTextColor(BLACK);
+
+  /* Playing a tone on the speaker until the button confirmation pressed. */
   push_button_2_status = LOW;
   tft.print("SPKR ..... ");
   while (push_button_2_status == LOW)
@@ -165,6 +192,7 @@ void initialize_external_modules()
   noTone(AUDIO_AMPLIFIER_PIN);
   tft_success_flag();
 
+  /* Turning on the lamp until the button confirmation pressed. */
   push_button_2_status = LOW;
   delay(1000);
   tft.print("LAMP ..... ");
@@ -175,10 +203,15 @@ void initialize_external_modules()
   }
   digitalWrite(LAMP_120VAC_SOURCE, LOW);
   tft_success_flag();
+
   push_button_2_status = LOW;
   delay(1000);
 }
 /* -------------------------------------------------------------------------- */
+/**
+ * This function sets the rotation of the screen, the text size, the cursor position, the background
+ * color, the text color, and prints the firmware version
+ */
 void tft_header()
 {
   tft.setRotation(3);
@@ -187,12 +220,15 @@ void tft_header()
   tft.fillScreen(WHITE);
   tft.setTextColor(BLUE);
   tft.println("");
-  tft.println("Camara de Condicionamiento Operante v" + firmware_version);
+  tft.println("OpenOCC v" + firmware_version);
   tft.setTextColor(BLACK);
   tft.println("");
   tft.setTextSize(1);
 }
 /* -------------------------------------------------------------------------- */
+/**
+ * It prints the main menu on the TFT screen
+ */
 void tft_main()
 {
   tft_header();
@@ -223,11 +259,21 @@ void tft_power_on()
   initialize_external_modules();
 }
 /* -------------------------------------------------------------------------- */
+/**
+ * Convert a value in seconds to milliseconds.
+ * 
+ * @param value The value to convert to milliseconds.
+ * 
+ * @return The return value is a uint64_t.
+ */
 uint64_t to_mills(uint8_t value)
 {
   return (uint64_t)value * (uint64_t)1000;
 }
 /* -------------------------------------------------------------------------- */
+/**
+ * It discharges the capacitor by turning on the unload resistor and turning off the DC source
+ */
 void capacitor_discharge()
 {
   digitalWrite(DC_170VDC_SOURCE, LOW);
@@ -239,6 +285,10 @@ void capacitor_discharge()
   delay(to_mills(capacitor_discharge_time_in_seconds));
 }
 /* -------------------------------------------------------------------------- */
+/**
+ * The function is called experiment_exploration_event() and it's purpose is to print a message to the
+ * screen and wait for a certain amount of time
+ */
 void experiment_exploration_event()
 {
   uint64_t limit_time = to_mills(exploration_time_str.toInt());
