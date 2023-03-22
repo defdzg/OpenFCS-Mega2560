@@ -1,4 +1,4 @@
-# OpenOCC: Arduino Mega2560 Application
+# OpenOCC: Arduino Mega2560 firmware
 ## Description
 ## Prerequisites
 ## Dependencies
