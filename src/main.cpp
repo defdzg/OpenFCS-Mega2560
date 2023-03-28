@@ -79,12 +79,12 @@ void retrieve_dht_data()
 /* -------------------------------------------------------------------------- */
 /* Setting the time and date of the RTC */
 DS3231 rtc;
-// #define DEBUG_RTC
+//#define DEBUG_RTC
 #ifdef DEBUG_RTC
-uint8_t set_hour = 0;
-uint8_t set_minute = 55;
+uint8_t set_hour = 10;
+uint8_t set_minute = 53;
 uint8_t set_second = 0;
-uint8_t set_day = 16;
+uint8_t set_day = 23;
 uint8_t set_month = 3;
 uint16_t set_year = 23;
 void set_rtc_date_and_time()
@@ -481,7 +481,10 @@ void full_experiment()
     tft_header();
     tft.println("Iniciando el evento " + String(current_event));
     tft.println("");
-    experiment_exploration_event();
+    if(current_event <= 1)
+    {
+      experiment_exploration_event();
+    }
     experiment_tone_event();
     experiment_shock_event();
     experiment_motion_recording_event(current_event);
