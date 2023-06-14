@@ -399,7 +399,7 @@ void experiment_motion_recording_event(int current_event)
   max_samples = (motion_recording_time)*data_logger_frequency_in_hz;
   interrupt_timer_in_microseconds = float(1) / float(data_logger_frequency_in_hz);
   interrupt_timer_in_microseconds = interrupt_timer_in_microseconds * float(1000000);
-  String new_recording_file = current_path + "pir" + String(current_event) + ".txt";
+  String new_recording_file = current_path + "evento" + String(current_event) + ".txt";
   file_pir_samples = SD.open(new_recording_file.c_str(), FILE_WRITE);
 
   if (file_pir_samples)
@@ -443,7 +443,7 @@ uint64_t experiment_total_millis;
  */
 void save_experiment_configuration_data_to_sd()
 {
-  String new_experiment = current_path + "config.txt";
+  String new_experiment = current_path + "configuracion_experimento.txt";
   file_experiment_configuration = SD.open(new_experiment.c_str(), FILE_WRITE);
   if (file_experiment_configuration)
   {
